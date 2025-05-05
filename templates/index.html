@@ -40,6 +40,10 @@
           <option value="AM2">Adams-Moulton 2 (AM2)</option>
         </select>
       </div>
+      <div class="col-md-3" id="epsilon-container" style="display: none;">
+        <label for="epsilon" class="form-label">ε (Epsilon):</label>
+        <input type="number" step="any" name="epsilon" id="epsilon" class="form-control">
+      </div>
       <div class="col-12">
         <button type="submit" class="btn btn-primary">Calculate</button>
       </div>
@@ -65,8 +69,20 @@
       </table>
     {% endif %}
   </div>
+
+  <script>
+    document.getElementById('method').addEventListener('change', function() {
+      var epsilonContainer = document.getElementById('epsilon-container');
+      if (this.value === 'AM2') {
+        epsilonContainer.style.display = 'block';  // Show ε field for Adams-Moulton 2
+      } else {
+        epsilonContainer.style.display = 'none';   // Hide it for other methods
+      }
+    });
+  </script>
 </body>
 </html>
+
 
 
 

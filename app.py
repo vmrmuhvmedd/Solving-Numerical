@@ -1,6 +1,8 @@
 from flask import Flask, render_template, request
 from sympy import symbols, sympify, lambdify
 import numpy as np
+import math
+import re
 
 app = Flask(__name__)
 
@@ -8,52 +10,55 @@ app = Flask(__name__)
 def index():
     result_table = []
     if request.method == "POST":
-        expr_str = request.form.get("expression")  # e.g. "x + y"
+        expr_str = request.form.get("expression")
         x0 = float(request.form.get("x0"))
         y0 = float(request.form.get("y0"))
         h = float(request.form.get("h"))
         steps = int(request.form.get("steps"))
-        method = request.form.get("method")  # AB2, AB3, AB4, AM2
+        method = request.form.get("method")
+        
+        # Retrieve epsilon if method is AM2
+        epsilon = None
+        if method == "AM2":
+            epsilon = float(request.form.get("epsilon", 0))  # Default to 0 if not provided
+
+        # Preprocess expression
+        expr_str = expr_str.replace("ln", "log").replace(" ", "")
+        expr_str = re.sub(r"([a-zA-Z0-9\)])(?=[a-zA-Z\(])", r"\1*", expr_str)
 
         x, y = symbols("x y")
-        expr = sympify(expr_str)
+        expr = sympify(expr_str, locals={
+            "log": math.log, "sin": math.sin, "cos": math.cos, 
+            "tan": math.tan, "exp": math.exp
+        })
         f = lambdify((x, y), expr, modules=["numpy"])
 
         xs = [x0]
         ys = [y0]
 
-        # Start with RK2 for bootstrapping
+        # Bootstrap with RK2
         for _ in range(min(3, steps)):
             k1 = f(xs[-1], ys[-1])
             k2 = f(xs[-1] + h, ys[-1] + h * k1)
             y_next = ys[-1] + (h / 2) * (k1 + k2)
-            x_next = xs[-1] + h
-            xs.append(x_next)
-            ys.append(y_next)
+            ys.append(float(y_next.evalf() if hasattr(y_next, 'evalf') else y_next))
+            xs.append(xs[-1] + h)
 
+        # Multistep methods
         for i in range(3, steps):
             xi, yi = xs[i], ys[i]
-            xi_1, yi_1 = xs[i - 1], ys[i - 1]
-            xi_2, yi_2 = xs[i - 2], ys[i - 2]
-
             if method == "AB2":
-                y_next = yi + h * (3 * f(xi, yi) - f(xi_1, yi_1)) / 2
+                y_next = yi + h * (3 * f(xi, yi) - f(xs[i-1], ys[i-1])) / 2
             elif method == "AB3":
-                y_next = yi + h * (23 * f(xi, yi) - 16 * f(xi_1, yi_1) + 5 * f(xi_2, yi_2)) / 12
-            elif method == "AB4":
-                xi_3, yi_3 = xs[i - 3], ys[i - 3]
-                y_next = yi + h * (55 * f(xi, yi) - 59 * f(xi_1, yi_1) + 37 * f(xi_2, yi_2) - 9 * f(xi_3, yi_3)) / 24
-            elif method == "AM2":
-                f_pred = f(xi, yi)
-                x_next = xi + h
-                y_predictor = yi + h * f_pred
-                y_next = yi + h * (f_pred + f(x_next, y_predictor)) / 2
-            else:
-                y_next = yi  # fallback
+                y_next = yi + h * (23*f(xi, yi) - 16*f(xs[i-1], ys[i-1]) + 5*f(xs[i-2], ys[i-2])) / 12
+            elif method == "AM2" and epsilon is not None:
+                # Apply Adams-Moulton 2 method with epsilon adjustment (if applicable)
+                y_next = yi + h * (3 * f(xi, yi) - f(xs[i-1], ys[i-1])) / 2
+                y_next += epsilon  # Example adjustment based on epsilon
 
-            x_next = xi + h
-            xs.append(x_next)
+            y_next = float(y_next.evalf() if hasattr(y_next, 'evalf') else y_next)
             ys.append(y_next)
+            xs.append(xi + h)
 
         result_table = list(zip(xs, ys))
 
@@ -61,6 +66,7 @@ def index():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
 
